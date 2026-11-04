@@ -14,10 +14,13 @@ jobs:
         with: { python-version: "3.12" }
       - uses: actions/setup-node@v4
         with: { node-version: "22" }
+      - name: Install Google client
+        run: pip install google-auth requests
       - name: Audit, metrics, dashboard
         env:
           BING_API_KEY: ${{ secrets.BING_API_KEY }}
           YANDEX_TOKEN: ${{ secrets.YANDEX_TOKEN }}
+          GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
         run: python seolocal.py weekly https://arkadiyikura.ru --speed 2
       - name: Encrypt dashboard
         env:
