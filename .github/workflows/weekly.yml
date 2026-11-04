@@ -1,0 +1,41 @@
+name: weekly-seo
+on:
+  schedule:
+    - cron: "0 5 * * 1"
+  workflow_dispatch: {}
+permissions:
+  contents: write
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - name: Audit and dashboard
+        run: python seolocal.py weekly https://arkadiyikura.ru --speed 2
+      - name: Encrypt dashboard
+        env:
+          DASH_PASSWORD: ${{ secrets.DASH_PASSWORD }}
+        run: |
+          mkdir -p site
+          npx --yes staticrypt@3 docs/arkadiyikura.ru/index.html -p "$DASH_PASSWORD" --short -d site --template-title "SEO" --template-instructions "Enter password"
+      - name: Save history
+        run: |
+          git config user.name "seolocal-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add data/history
+          git commit -m "weekly snapshot" || true
+          git push || true
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: site }
+  deploy:
+    needs: run
+    runs-on: ubuntu-latest
+    permissions: { pages: write, id-token: write }
+    environment: { name: github-pages, url: "${{ steps.d.outputs.page_url }}" }
+    steps:
+      - id: d
+        uses: actions/deploy-pages@v4
