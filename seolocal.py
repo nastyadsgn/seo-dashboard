@@ -46,7 +46,7 @@ def build_report(url, pages=None, issues=None, health=None, broken=None, speed=N
     return out
 
 
-def build_dashboard(url, date=None):
+def build_dashboard(url, date=None, collect=False):
     """Снимок метрик в историю + docs/<сайт>/index.html по данным последнего аудита."""
     import dashboard as D
     import history as H
@@ -61,7 +61,10 @@ def build_dashboard(url, date=None):
     out_dir = os.path.join(root, "docs", slug(url))
     os.makedirs(out_dir, exist_ok=True)
     out = os.path.join(out_dir, "index.html")
-    open(out, "w", encoding="utf-8").write(D.build(cfg, H.load(slug(url), DATA), d, d.get("speed")))
+    import collectors as CO
+    if collect:
+        CO.collect(host.replace("www.", ""), DATA, slug(url))
+    open(out, "w", encoding="utf-8").write(D.build(cfg, H.load(slug(url), DATA), d, d.get("speed"), CO.latest(DATA, slug(url))))
     return out
 
 
@@ -107,7 +110,7 @@ def main():
         U.check(url, DB)
         out = build_report(url, pages, issues, health, broken, speed)
         if args.cmd == "weekly":
-            print("Дашборд:", build_dashboard(url))
+            print("Дашборд:", build_dashboard(url, collect=True))
         e =sum(i["severity"] == "error" for i in issues)
         w = sum(i["severity"] == "warning" for i in issues)
         print(f"\nГотово. Страниц: {len(pages)}, здоровье: {health}/100, ошибок: {e}, предупреждений: {w}, битых ссылок: {len(broken)}")

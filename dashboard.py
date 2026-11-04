@@ -143,7 +143,36 @@ def delta(cur, prev, lower_better, suf):
     return f"<span class={'ok' if good else 'bad'}>{'▲' if diff > 0 else '▼'} {abs(diff):g}{suf} к прошлой неделе</span>"
 
 
-def build(cfg, history, audit, speed=None):
+SRC_RU = {"bing": "Bing Webmaster", "yandex_webmaster": "Яндекс Вебмастер", "yandex_metrika": "Яндекс Метрика"}
+
+
+def metrics_section(metrics):
+    if not metrics:
+        return ""
+    cards = []
+    for s in metrics["sources"]:
+        name = SRC_RU.get(s["source"], s["source"])
+        if s["status"] == "not_connected":
+            cards.append(f"<div class=card><div class=k>{name}</div><div class='v mute' style='font-size:16px'>Не подключено</div></div>")
+        elif s["status"] == "error":
+            cards.append(f"<div class=card><div class=k>{name}</div><div class=bad style='font-size:13px'>Ошибка: {E(s['error'])}</div></div>")
+        elif s["source"] == "yandex_metrika":
+            cards.append(f"<div class=card><div class=k>{name}, 28 дн.</div><div class=v>{s['visits']}</div><div class=d>визитов · {s['users']} посетителей · отказы {s['bounce']}%</div></div>")
+        else:
+            extra = f" · ИКС {s['sqi']}" if s.get("sqi") is not None else ""
+            cards.append(f"<div class=card><div class=k>{name}, 28 дн.</div><div class=v>{s['clicks']}</div><div class=d>кликов · {s['impressions']} показов{extra}</div></div>")
+    h = [f"<h2>Подключённые источники</h2><div class=sub>Данные на {E(metrics['date'])}, собираются автоматически по понедельникам.</div><div class=grid style='margin-top:8px'>" + "".join(cards) + "</div>"]
+    for s in metrics["sources"]:
+        if s["status"] == "ok" and s.get("top_queries"):
+            rows = "".join(f"<tr><td>{E(str(q[0]))}</td><td>{q[1]}</td><td>{q[2]}</td><td>{q[3]}</td></tr>" for q in s["top_queries"])
+            h.append(f"<details><summary>{SRC_RU[s['source']]}: топ запросов</summary><div class=tw><table><tr><th>Запрос</th><th>Клики</th><th>Показы</th><th>Позиция</th></tr>{rows}</table></div></details>")
+        if s["status"] == "ok" and s["source"] == "yandex_metrika" and s.get("sources"):
+            rows = "".join(f"<tr><td>{E(a)}</td><td>{b}</td></tr>" for a, b in s["sources"])
+            h.append(f"<details><summary>Метрика: источники трафика</summary><div class=tw><table><tr><th>Источник</th><th>Визитов</th></tr>{rows}</table></div></details>")
+    return "".join(h)
+
+
+def build(cfg, history, audit, speed=None, metrics=None):
     cur = history[-1]
     prev = history[-2] if len(history) > 1 else None
     stages = cfg.get("stages", {})
@@ -176,6 +205,7 @@ def build(cfg, history, audit, speed=None):
                 stages=[dict(id=k, title=t, actions=STAGE_DATA[k]["actions"],
                              prompt=STAGE_DATA[k]["prompt"].format(ctx=ctx, name=cfg["name"], url=cfg["url"]))
                         for k, t, _ in STAGES])
+    h.append(metrics_section(metrics))
     h.append("<h2>Данные Google Search Console</h2><div class=card id=gsc><div class=sub>Запросы, показы, клики и позиции из вашего "
              "аккаунта Google. Данные загружаются в браузере и нигде не сохраняются.</div>"
              "<div class=row><button class=btn id=gsc-btn>Подключить Search Console</button></div><div id=gsc-out></div></div>")
