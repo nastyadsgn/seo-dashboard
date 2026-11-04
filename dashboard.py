@@ -102,6 +102,10 @@ details{border-top:1px solid var(--line);padding:8px 0}summary{cursor:pointer;fo
 .st>summary::-webkit-details-marker{display:none}.todo-i{display:flex;gap:9px;align-items:flex-start;padding:4px 0}.todo-i input{margin-top:4px;accent-color:var(--accent)}
 .todo-i.done span{color:var(--mute);text-decoration:line-through}.row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px}
 .ghost-note{font-size:12.5px;color:var(--mute);margin-top:6px}ol.steps{margin:8px 0 0 18px;padding:0}ol.steps li{margin:3px 0}
+.legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12.5px;color:var(--mute);margin-top:6px}.legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px}
+.grid2{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(320px,1fr))}h3.sec{font-size:15px;margin:18px 0 8px}
+.hb{display:grid;grid-template-columns:minmax(90px,38%) 1fr auto;gap:8px;align-items:center;margin:6px 0;font-size:13.5px}.hl{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ht{background:var(--chip);border-radius:5px;height:10px;overflow:hidden}.ht i{display:block;height:100%;border-radius:5px}
 .pre{white-space:pre-wrap;background:var(--chip);border-radius:8px;padding:10px;font:12.5px/1.45 ui-monospace,Consolas,monospace;margin-top:8px}
 """
 
@@ -143,35 +147,104 @@ def delta(cur, prev, lower_better, suf):
     return f"<span class={'ok' if good else 'bad'}>{'▲' if diff > 0 else '▼'} {abs(diff):g}{suf} к прошлой неделе</span>"
 
 
-SRC_RU = {"bing": "Bing Webmaster", "yandex_webmaster": "Яндекс Вебмастер", "yandex_metrika": "Яндекс Метрика",
-          "google_gsc": "Google Search Console", "google_ga4": "Google Analytics 4"}
+MONTHS = ["января", "февраля", "марта", "апреля", "мая", "июня", "июля", "августа", "сентября", "октября", "ноября", "декабря"]
+PALETTE = ["#1f5fd6", "#e8590c", "#2b8a3e", "#9c36b5", "#0c8599"]
+
+
+def ru_date(iso):
+    y, m, d = iso.split("-")
+    return f"{int(d)} {MONTHS[int(m) - 1]}"
+
+
+def line_chart(series):
+    """series: [(подпись, [[YYYY-MM-DD, значение], ...])] -> SVG с несколькими линиями."""
+    series = [(n, s) for n, s in series if s]
+    if not series:
+        return ""
+    days = sorted({d for _, s in series for d, _ in s})
+    mx = max(max(v for _, v in s) for _, s in series) or 1
+    W, H, L, B, T = 760, 260, 38, 26, 10
+    x = lambda d: L + (W - L - 10) * (days.index(d) / max(1, len(days) - 1))
+    y = lambda v: T + (H - T - B) * (1 - v / mx)
+    out = [f"<svg viewBox='0 0 {W} {H}' style='width:100%;height:auto' role=img aria-label='График по дням'>"]
+    for i in range(5):
+        v = mx * i / 4
+        out.append(f"<line x1={L} x2={W - 10} y1={y(v):.1f} y2={y(v):.1f} stroke='var(--line)'/><text x={L - 6} y={y(v) + 4:.1f} text-anchor=end font-size=11 fill='var(--mute)'>{round(v)}</text>")
+    for i, d in enumerate(days):
+        if i % max(1, len(days) // 8) == 0 or i == len(days) - 1:
+            out.append(f"<text x={x(d):.1f} y={H - 8} text-anchor=middle font-size=11 fill='var(--mute)'>{int(d[8:])}.{d[5:7]}</text>")
+    for k, (name, s) in enumerate(series):
+        c = PALETTE[k % len(PALETTE)]
+        pts = " ".join(f"{x(d):.1f},{y(v):.1f}" for d, v in sorted(s))
+        out.append(f"<polyline points='{pts}' fill=none stroke='{c}' stroke-width=2.4 stroke-linejoin=round/>")
+        for d, v in s:
+            out.append(f"<circle cx={x(d):.1f} cy={y(v):.1f} r=3 fill='{c}'><title>{E(name)}: {ru_date(d)} — {v}</title></circle>")
+    out.append("</svg><div class=legend>" + "".join(f"<span><i style='background:{PALETTE[k % len(PALETTE)]}'></i>{E(n)}</span>" for k, (n, _) in enumerate(series)) + "</div>")
+    return "".join(out)
+
+
+def hbars(rows, color="var(--accent)"):
+    """rows: [[подпись, число], ...] -> горизонтальные столбцы."""
+    rows = [r for r in rows if r[1] is not None]
+    if not rows:
+        return "<div class=sub>Пока нет данных</div>"
+    mx = max(r[1] for r in rows) or 1
+    return "".join(f"<div class=hb><span class=hl>{E(str(n))}</span><div class=ht><i style='width:{max(2, v * 100 / mx):.0f}%;background:{color}'></i></div><b>{v}</b></div>" for n, v in rows)
 
 
 def metrics_section(metrics):
     if not metrics:
         return ""
+    src = {s["source"]: s for s in metrics["sources"]}
+    ok = lambda k: src.get(k, {}).get("status") == "ok"
+    d1, d2 = metrics.get("period", ["", ""])
+    mname = ["январь", "февраль", "март", "апрель", "май", "июнь", "июль", "август", "сентябрь", "октябрь", "ноябрь", "декабрь"][int(d1[5:7]) - 1] if d1 else ""
+    h = [f"<h2>Поисковый трафик за {mname}</h2><div class=sub>Только переходы из поисковых систем, с {ru_date(d1)} по {ru_date(d2)}. "
+         f"Обновляется раз в неделю по понедельникам (данные на {ru_date(metrics['date'])}).</div>"]
     cards = []
-    for s in metrics["sources"]:
-        name = SRC_RU.get(s["source"], s["source"])
-        if s["status"] == "not_connected":
-            cards.append(f"<div class=card><div class=k>{name}</div><div class='v mute' style='font-size:16px'>Не подключено</div></div>")
-        elif s["status"] == "error":
-            cards.append(f"<div class=card><div class=k>{name}</div><div class=bad style='font-size:13px'>Ошибка: {E(s['error'])}</div></div>")
-        elif s["source"] == "google_ga4":
-            cards.append(f"<div class=card><div class=k>{name}, 28 дн.</div><div class=v>{s['sessions']}</div><div class=d>сеансов · {s['users']} пользователей · {s['pageviews']} просмотров</div></div>")
-        elif s["source"] == "yandex_metrika":
-            cards.append(f"<div class=card><div class=k>{name}, 28 дн.</div><div class=v>{s['visits']}</div><div class=d>визитов · {s['users']} посетителей · отказы {s['bounce']}%</div></div>")
-        else:
-            extra = f" · ИКС {s['sqi']}" if s.get("sqi") is not None else ""
-            cards.append(f"<div class=card><div class=k>{name}, 28 дн.</div><div class=v>{s['clicks']}</div><div class=d>кликов · {s['impressions']} показов{extra}</div></div>")
-    h = [f"<h2>Подключённые источники</h2><div class=sub>Данные на {E(metrics['date'])}, собираются автоматически по понедельникам.</div><div class=grid style='margin-top:8px'>" + "".join(cards) + "</div>"]
-    for s in metrics["sources"]:
-        if s["status"] == "ok" and s.get("top_queries"):
+    ym, ga, gsc, bing, yw = (src.get(k, {}) for k in ("yandex_metrika", "google_ga4", "google_gsc", "bing", "yandex_webmaster"))
+    if ym.get("status") == "ok":
+        cards.append(("Визиты из поиска (Метрика)", ym["visits"], f"{ym['users']} посетителей · отказы {ym['bounce']}%"))
+    if ga.get("status") == "ok":
+        cards.append(("Сеансы из поиска (GA4)", ga["sessions"], f"{ga['users']} пользователей · {ga['pageviews']} просмотров"))
+    if gsc.get("status") == "ok":
+        cards.append(("Клики Google", gsc["clicks"], f"{gsc['impressions']} показов"))
+    if bing.get("status") == "ok":
+        cards.append(("Клики Bing", bing["clicks"], f"{bing['impressions']} показов"))
+    if yw.get("status") == "ok":
+        cards.append(("Клики Яндекса (Вебмастер)", yw["clicks"], f"{yw['impressions']} показов" + (f" · ИКС {yw['sqi']}" if yw.get("sqi") is not None else "")))
+    h.append("<div class=grid style='margin-top:10px'>" + "".join(f"<div class=card><div class=k>{E(a)}</div><div class=v>{b}</div><div class=d>{E(c)}</div></div>" for a, b, c in cards) + "</div>")
+    notes = []
+    for k, label in (("yandex_metrika", "Яндекс Метрика"), ("yandex_webmaster", "Яндекс Вебмастер"), ("bing", "Bing Webmaster"),
+                     ("google_gsc", "Google Search Console"), ("google_ga4", "Google Analytics 4")):
+        s = src.get(k, {})
+        if s.get("status") == "not_connected":
+            notes.append(f"{label}: не подключено")
+        elif s.get("status") == "error":
+            notes.append(f"{label}: {s.get('error', 'ошибка')}")
+    if notes:
+        h.append("<div class=ghost-note style='margin-top:8px'>" + " · ".join(E(n) for n in notes) + "</div>")
+    series = [("Метрика: визиты из поиска", ym.get("daily")), ("GA4: сеансы из поиска", ga.get("daily")),
+              ("Google: клики", gsc.get("daily")), ("Bing: клики", bing.get("daily"))]
+    chart = line_chart([(n, s) for n, s in series if s])
+    if chart:
+        h.append("<h3 class=sec>Динамика по дням</h3><div class=card>" + chart + "</div>")
+    two = []
+    if ym.get("engines"):
+        two.append("<div class=card><h3 class=sec style='margin:0 0 8px'>Поисковые системы (визиты)</h3>" + hbars(ym["engines"]) + "</div>")
+    goals = ym.get("goals") or []
+    ggoals = ga.get("goals") or []
+    if goals:
+        two.append("<div class=card><h3 class=sec style='margin:0 0 8px'>Цели из поиска (Метрика)</h3>" + hbars(goals, "#2b8a3e") + "</div>")
+    if ggoals:
+        two.append("<div class=card><h3 class=sec style='margin:0 0 8px'>Ключевые события из поиска (GA4)</h3>" + hbars(ggoals, "#2b8a3e") + "</div>")
+    if two:
+        h.append("<div class=grid2 style='margin-top:12px'>" + "".join(two) + "</div>")
+    for k, label in (("google_gsc", "Google"), ("bing", "Bing"), ("yandex_webmaster", "Яндекс")):
+        s = src.get(k, {})
+        if s.get("status") == "ok" and s.get("top_queries"):
             rows = "".join(f"<tr><td>{E(str(q[0]))}</td><td>{q[1]}</td><td>{q[2]}</td><td>{q[3]}</td></tr>" for q in s["top_queries"])
-            h.append(f"<details><summary>{SRC_RU[s['source']]}: топ запросов</summary><div class=tw><table><tr><th>Запрос</th><th>Клики</th><th>Показы</th><th>Позиция</th></tr>{rows}</table></div></details>")
-        if s["status"] == "ok" and s["source"] in ("yandex_metrika", "google_ga4") and s.get("sources"):
-            rows = "".join(f"<tr><td>{E(a)}</td><td>{b}</td></tr>" for a, b in s["sources"])
-            h.append(f"<details><summary>Метрика: источники трафика</summary><div class=tw><table><tr><th>Источник</th><th>Визитов</th></tr>{rows}</table></div></details>")
+            h.append(f"<details><summary>Запросы в {label}</summary><div class=tw><table><tr><th>Запрос</th><th>Клики</th><th>Показы</th><th>Позиция</th></tr>{rows}</table></div></details>")
     return "".join(h)
 
 
