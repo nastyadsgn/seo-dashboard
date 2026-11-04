@@ -143,7 +143,8 @@ def delta(cur, prev, lower_better, suf):
     return f"<span class={'ok' if good else 'bad'}>{'▲' if diff > 0 else '▼'} {abs(diff):g}{suf} к прошлой неделе</span>"
 
 
-SRC_RU = {"bing": "Bing Webmaster", "yandex_webmaster": "Яндекс Вебмастер", "yandex_metrika": "Яндекс Метрика"}
+SRC_RU = {"bing": "Bing Webmaster", "yandex_webmaster": "Яндекс Вебмастер", "yandex_metrika": "Яндекс Метрика",
+          "google_gsc": "Google Search Console", "google_ga4": "Google Analytics 4"}
 
 
 def metrics_section(metrics):
@@ -156,6 +157,8 @@ def metrics_section(metrics):
             cards.append(f"<div class=card><div class=k>{name}</div><div class='v mute' style='font-size:16px'>Не подключено</div></div>")
         elif s["status"] == "error":
             cards.append(f"<div class=card><div class=k>{name}</div><div class=bad style='font-size:13px'>Ошибка: {E(s['error'])}</div></div>")
+        elif s["source"] == "google_ga4":
+            cards.append(f"<div class=card><div class=k>{name}, 28 дн.</div><div class=v>{s['sessions']}</div><div class=d>сеансов · {s['users']} пользователей · {s['pageviews']} просмотров</div></div>")
         elif s["source"] == "yandex_metrika":
             cards.append(f"<div class=card><div class=k>{name}, 28 дн.</div><div class=v>{s['visits']}</div><div class=d>визитов · {s['users']} посетителей · отказы {s['bounce']}%</div></div>")
         else:
@@ -166,7 +169,7 @@ def metrics_section(metrics):
         if s["status"] == "ok" and s.get("top_queries"):
             rows = "".join(f"<tr><td>{E(str(q[0]))}</td><td>{q[1]}</td><td>{q[2]}</td><td>{q[3]}</td></tr>" for q in s["top_queries"])
             h.append(f"<details><summary>{SRC_RU[s['source']]}: топ запросов</summary><div class=tw><table><tr><th>Запрос</th><th>Клики</th><th>Показы</th><th>Позиция</th></tr>{rows}</table></div></details>")
-        if s["status"] == "ok" and s["source"] == "yandex_metrika" and s.get("sources"):
+        if s["status"] == "ok" and s["source"] in ("yandex_metrika", "google_ga4") and s.get("sources"):
             rows = "".join(f"<tr><td>{E(a)}</td><td>{b}</td></tr>" for a, b in s["sources"])
             h.append(f"<details><summary>Метрика: источники трафика</summary><div class=tw><table><tr><th>Источник</th><th>Визитов</th></tr>{rows}</table></div></details>")
     return "".join(h)

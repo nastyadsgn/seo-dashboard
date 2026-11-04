@@ -102,8 +102,66 @@ def yandex_metrika(host):
         return dict(source="yandex_metrika", status="error", error=str(e)[:200])
 
 
+def _google():
+    raw = os.environ.get("GOOGLE_SA_JSON")
+    if not raw:
+        return None
+    from google.auth.transport.requests import AuthorizedSession
+    from google.oauth2 import service_account
+    scopes = ["https://www.googleapis.com/auth/webmasters.readonly", "https://www.googleapis.com/auth/analytics.readonly"]
+    return AuthorizedSession(service_account.Credentials.from_service_account_info(json.loads(raw), scopes=scopes))
+
+
+def google_gsc(host):
+    try:
+        s = _google()
+        if s is None:
+            return dict(source="google_gsc", status="not_connected")
+        sites = [x["siteUrl"] for x in s.get("https://www.googleapis.com/webmasters/v3/sites").json().get("siteEntry", [])]
+        site = next((x for x in sites if x in (f"sc-domain:{host}", f"https://{host}/", f"https://www.{host}/")), None)
+        if not site:
+            return dict(source="google_gsc", status="error",
+                        error=f"у сервисного аккаунта нет доступа к {host} в Search Console (видит: {', '.join(sites) or 'ничего'})")
+        d1, _ = _days(31)
+        _, d2 = _days(3)
+        url = "https://www.googleapis.com/webmasters/v3/sites/" + urllib.parse.quote(site, safe="") + "/searchAnalytics/query"
+
+        def q(dims, n=25):
+            return s.post(url, json=dict(startDate=d1, endDate=d2, dimensions=dims, rowLimit=n)).json().get("rows", [])
+        tot = (q([], 1) or [{}])[0]
+        top = [[r["keys"][0], r["clicks"], r["impressions"], round(r["position"], 1)] for r in q(["query"])]
+        return dict(source="google_gsc", status="ok", site=site, clicks=round(tot.get("clicks", 0)),
+                    impressions=round(tot.get("impressions", 0)), top_queries=top)
+    except Exception as e:
+        return dict(source="google_gsc", status="error", error=str(e)[:200])
+
+
+def google_ga4(host):
+    try:
+        s = _google()
+        if s is None:
+            return dict(source="google_ga4", status="not_connected")
+        prop = None
+        for a in s.get("https://analyticsadmin.googleapis.com/v1beta/accountSummaries").json().get("accountSummaries", []):
+            for p in a.get("propertySummaries", []):
+                for st in s.get(f"https://analyticsadmin.googleapis.com/v1beta/{p['property']}/dataStreams").json().get("dataStreams", []):
+                    if host in st.get("webStreamData", {}).get("defaultUri", ""):
+                        prop = p["property"]
+        if not prop:
+            return dict(source="google_ga4", status="error", error=f"у сервисного аккаунта нет доступа к ресурсу GA4 для {host}")
+        body = dict(dateRanges=[dict(startDate="28daysAgo", endDate="today")], metrics=[dict(name="sessions"), dict(name="activeUsers"), dict(name="screenPageViews")],
+                    dimensions=[dict(name="sessionDefaultChannelGroup")])
+        r = s.post(f"https://analyticsdata.googleapis.com/v1beta/{prop}:runReport", json=body).json()
+        rows = r.get("rows", [])
+        ch = [[x["dimensionValues"][0]["value"], int(x["metricValues"][0]["value"])] for x in rows]
+        tot = [sum(int(x["metricValues"][i]["value"]) for x in rows) for i in range(3)]
+        return dict(source="google_ga4", status="ok", property=prop, sessions=tot[0], users=tot[1], pageviews=tot[2], sources=ch)
+    except Exception as e:
+        return dict(source="google_ga4", status="error", error=str(e)[:200])
+
+
 def collect(host, data_dir, slug):
-    res = [bing(host), yandex_webmaster(host), yandex_metrika(host)]
+    res = [bing(host), yandex_webmaster(host), yandex_metrika(host), google_gsc(host), google_ga4(host)]
     d = os.path.join(data_dir, "metrics", slug)
     os.makedirs(d, exist_ok=True)
     json.dump(dict(date=time.strftime("%Y-%m-%d"), sources=res), open(os.path.join(d, time.strftime("%Y-%m-%d") + ".json"), "w", encoding="utf-8"), ensure_ascii=False)
