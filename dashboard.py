@@ -1,7 +1,58 @@
 """Дашборд проекта: один HTML-файл без внешних библиотек. Метрики из истории + этапы карты SEO-проекта."""
 import html
+import json
+
+from stages_data import CTX, GOOGLE_STEPS, STAGE_DATA
 
 E = html.escape
+
+JS = r"""
+const $=s=>document.querySelector(s),K=(s,i)=>'sl:'+D.host+':'+s+':'+i;
+const ls={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
+const esc=t=>t.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+function copy(text,btn,label){navigator.clipboard.writeText(text).then(()=>{btn.textContent='Скопировано ✓';setTimeout(()=>btn.textContent=label,1800)}).catch(()=>{prompt('Скопируйте текст:',text)})}
+function done(s){return s.actions.map((a,i)=>ls.get(K(s.id,i))==='1')}
+function refresh(){let tot=0,ok=0;D.stages.forEach(s=>{const d=done(s),n=d.filter(Boolean).length;tot+=d.length;ok+=n;
+ const c=$('#chip'+s.id);const all=n===d.length;c.textContent=all?'Этап закрыт':n?('В работе '+n+'/'+d.length):'Не начато';c.className='chip '+(all?'ok':n?'warn':'mute');
+ s.actions.forEach((a,i)=>$('#row'+s.id+'_'+i).classList.toggle('done',d[i]));$('#close'+s.id).hidden=!all});
+ const p=Math.round(ok*100/tot);$('#pct').textContent=p;$('#pbar').style.width=p+'%'}
+D.stages.forEach((s,idx)=>{const b=$('#body'+s.id);const nxt=D.stages[idx+1];
+ b.innerHTML=s.actions.map((a,i)=>'<label class=todo-i id=row'+s.id+'_'+i+'><input type=checkbox data-s='+s.id+' data-i='+i+(ls.get(K(s.id,i))==='1'?' checked':'')+'><span>'+esc(a)+'</span></label>').join('')+
+ '<div class=row><button class=btn data-p='+idx+'>Скопировать промт для Claude</button><button class="btn ghost" id=close'+s.id+' data-c='+idx+' hidden>Этап закрыт — передать Claude</button></div>';});
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&t.dataset.s){ls.set(K(t.dataset.s,t.dataset.i),t.checked?'1':'0');refresh()}});
+document.addEventListener('click',e=>{const t=e.target;if(t.dataset&&t.dataset.p!==undefined){const s=D.stages[t.dataset.p],d=done(s);
+  copy(s.prompt+'\n\nСписок действий этапа:\n'+s.actions.map((a,i)=>(d[i]?'[x] ':'[ ] ')+a).join('\n'),t,'Скопировать промт для Claude')}
+ if(t.dataset&&t.dataset.c!==undefined){const i=+t.dataset.c,s=D.stages[i],n=D.stages[i+1];
+  copy('Проект: '+D.name+', сайт '+D.url+'.\nЭтап '+s.id+' «'+s.title+'» закрыт. Выполнено:\n'+s.actions.map(a=>'- '+a).join('\n')+'\n\nПроверь, всё ли сделано по сути (задай мне уточняющие вопросы, если данных не хватает), и зафиксируй результат этапа. '+(n?'Затем веди меня на этап '+n.id+' «'+n.title+'»:\n'+n.actions.map(a=>'- '+a).join('\n'):'Это последний этап: составь план на следующий месяц.'),t,'Этап закрыт — передать Claude')}});
+refresh();
+
+// --- Google Search Console ---
+const btn=$('#gsc-btn'),out=$('#gsc-out');
+function setup(){out.innerHTML='<div class=sub style="margin-top:8px"><b>Один раз нужно создать доступ Google</b> (бесплатно, 5 минут):</div><ol class=steps>'+D.googleSteps.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ol>'}
+function gsc(token){const H={Authorization:'Bearer '+token,'Content-Type':'application/json'};
+ return fetch('https://www.googleapis.com/webmasters/v3/sites',{headers:H}).then(r=>r.json()).then(async j=>{
+  const sites=(j.siteEntry||[]).map(x=>x.siteUrl);const h=D.host.replace(/^www\./,'');
+  const site=sites.find(s=>s==='sc-domain:'+h)||sites.find(s=>s.includes('//'+h)||s.includes('//www.'+h));
+  if(!site){out.innerHTML='<p class=bad>Сайт '+esc(h)+' не найден в этом аккаунте Google. Доступны: '+esc(sites.join(', ')||'ничего')+'. Войдите другим аккаунтом.</p>';btn.textContent='Войти другим аккаунтом';btn.disabled=false;return}
+  const end=new Date(Date.now()-3*864e5),start=new Date(end-27*864e5),f=d=>d.toISOString().slice(0,10);
+  const q=dim=>fetch('https://www.googleapis.com/webmasters/v3/sites/'+encodeURIComponent(site)+'/searchAnalytics/query',{method:'POST',headers:H,body:JSON.stringify({startDate:f(start),endDate:f(end),dimensions:dim,rowLimit:dim[0]=='query'?100:15})}).then(r=>r.json());
+  const [tot,qs,pg]=await Promise.all([q([]),q(['query']),q(['page'])]);const T=(tot.rows||[{}])[0];
+  const rows=(qs.rows||[]);const grow=rows.filter(r=>r.position>=8&&r.position<=20&&r.impressions>=10).sort((a,b)=>b.impressions-a.impressions).slice(0,10);
+  const lowctr=rows.filter(r=>r.position<8&&r.impressions>=30&&r.ctr<0.03).slice(0,8);
+  const tb=(h,rs)=>'<div class=tw style="margin-top:10px"><table><tr>'+h.map(x=>'<th>'+x+'</th>').join('')+'</tr>'+rs.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</table></div>';
+  const m=r=>[esc(r.keys[0]),r.clicks,r.impressions,(r.ctr*100).toFixed(1)+'%',r.position.toFixed(1)];
+  out.innerHTML='<div class=grid style="margin-top:10px"><div class=card><div class=k>Клики, 28 дн.</div><div class=v>'+(T.clicks||0)+'</div></div><div class=card><div class=k>Показы</div><div class=v>'+(T.impressions||0)+'</div></div><div class=card><div class=k>CTR</div><div class=v>'+((T.ctr||0)*100).toFixed(1)+'%</div></div><div class=card><div class=k>Средняя позиция</div><div class=v>'+(T.position||0).toFixed(1)+'</div></div></div>'+
+   '<h3 style="margin:16px 0 0">Быстрые точки роста: позиции 8–20</h3>'+tb(['Запрос','Клики','Показы','CTR','Позиция'],grow.map(m))+
+   '<h3 style="margin:16px 0 0">Показы есть, кликов мало (CTR &lt; 3%)</h3>'+tb(['Запрос','Клики','Показы','CTR','Позиция'],lowctr.map(m))+
+   '<h3 style="margin:16px 0 0">Топ страниц</h3>'+tb(['Страница','Клики','Показы','CTR','Позиция'],(pg.rows||[]).map(r=>[esc(r.keys[0]),r.clicks,r.impressions,(r.ctr*100).toFixed(1)+'%',r.position.toFixed(1)]))+
+   '<div class=row><button class=btn id=gsc-copy>Скопировать данные для Claude (этап 1)</button></div>';
+  $('#gsc-copy').onclick=ev=>copy('Проект: '+D.name+', '+D.url+'. Данные Search Console за 28 дней (сайт '+site+').\nЗапросы (запрос | клики | показы | CTR | позиция):\n'+rows.slice(0,100).map(r=>[r.keys[0],r.clicks,r.impressions,(r.ctr*100).toFixed(1)+'%',r.position.toFixed(1)].join(' | ')).join('\n')+'\n\nНайди точки роста и дай рекомендации по этапу 1 карты проекта.',ev.target,'Скопировать данные для Claude (этап 1)');
+  btn.textContent='Обновить данные';btn.disabled=false;}).catch(e=>{out.innerHTML='<p class=bad>Не удалось получить данные: '+esc(String(e))+'</p>';btn.disabled=false})}
+btn.onclick=()=>{if(!D.clientId){setup();return}
+ if(!window.google||!google.accounts){const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=()=>btn.click();document.head.appendChild(s);btn.textContent='Загрузка…';return}
+ btn.disabled=true;btn.textContent='Вход через Google…';
+ google.accounts.oauth2.initTokenClient({client_id:D.clientId,scope:'https://www.googleapis.com/auth/webmasters.readonly',callback:r=>{if(r.access_token){btn.textContent='Загружаю данные…';gsc(r.access_token)}else{btn.disabled=false;btn.textContent='Подключить Search Console'}},error_callback:()=>{btn.disabled=false;btn.textContent='Подключить Search Console'}}).requestAccessToken();};
+"""
 
 STAGES = [
     ("0", "Контекст, доступы, цели", "Метрика/GA4/GTM, цели проверены, сверка с CRM"),
@@ -27,8 +78,8 @@ KPIS = [("health", "Здоровье сайта", False, "/100"), ("errors", "О
         ("uptime_pct", "Uptime", False, "%"), ("perf", "Скорость (Lighthouse)", False, "/100")]
 
 CSS = """
-:root{--bg:#f6f5f1;--card:#fff;--ink:#1d1d1b;--mute:#76746c;--line:#e6e3da;--accent:#2f6f4f;--ok:#1b7a3a;--warn:#a15c00;--bad:#b3261e;--info:#1a5fb4;--chip:#eeece5}
-@media(prefers-color-scheme:dark){:root{--bg:#161614;--card:#201f1c;--ink:#ecebe6;--mute:#9a978d;--line:#34332e;--accent:#6fbf92;--ok:#6fd08c;--warn:#e0a24d;--bad:#ef7d74;--info:#7db2f0;--chip:#2b2a26}}
+:root{--bg:#f6f5f1;--card:#fff;--ink:#1d1d1b;--mute:#76746c;--line:#e6e3da;--accent:#1f5fd6;--ok:#1b7a3a;--warn:#a15c00;--bad:#b3261e;--info:#1a5fb4;--chip:#eeece5}
+@media(prefers-color-scheme:dark){:root{--bg:#161614;--card:#201f1c;--ink:#ecebe6;--mute:#9a978d;--line:#34332e;--accent:#6ea3ff;--ok:#6fd08c;--warn:#e0a24d;--bad:#ef7d74;--info:#7db2f0;--chip:#2b2a26}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,Segoe UI,sans-serif}
 main{max-width:1180px;margin:0 auto;padding:22px 16px 70px}h1{font-size:24px;margin:0}h2{font-size:18px;margin:34px 0 10px}
 .sub{color:var(--mute);font-size:13px}.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fill,minmax(210px,1fr))}
@@ -44,6 +95,14 @@ table{border-collapse:collapse;width:100%;font-size:13.5px}th,td{padding:7px 8px
 .bar{height:8px;background:var(--chip);border-radius:5px;overflow:hidden;margin-top:8px}.bar i{display:block;height:100%;background:var(--accent)}
 details{border-top:1px solid var(--line);padding:8px 0}summary{cursor:pointer;font-weight:600}
 @media(max-width:560px){.v{font-size:24px}.stage{grid-template-columns:28px 1fr}.stage .chip{grid-column:2}}
+.btn{background:var(--accent);color:#fff;border:0;border-radius:8px;padding:8px 14px;font:600 14px system-ui;cursor:pointer}
+@media(prefers-color-scheme:dark){.btn{color:#0b1b3a}}
+.btn.ghost{background:transparent;color:var(--accent);border:1px solid var(--accent)}.btn:disabled{opacity:.5}
+.st{border-bottom:1px solid var(--line);padding:6px 0}.st>summary{display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center;list-style:none}
+.st>summary::-webkit-details-marker{display:none}.todo-i{display:flex;gap:9px;align-items:flex-start;padding:4px 0}.todo-i input{margin-top:4px;accent-color:var(--accent)}
+.todo-i.done span{color:var(--mute);text-decoration:line-through}.row{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0 4px}
+.ghost-note{font-size:12.5px;color:var(--mute);margin-top:6px}ol.steps{margin:8px 0 0 18px;padding:0}ol.steps li{margin:3px 0}
+.pre{white-space:pre-wrap;background:var(--chip);border-radius:8px;padding:10px;font:12.5px/1.45 ui-monospace,Consolas,monospace;margin-top:8px}
 """
 
 CODE_RU = {
@@ -111,12 +170,22 @@ def build(cfg, history, audit, speed=None):
         h.append(f"<div class=card><div class=k>Посетители (счётчик)</div><div class=v>{cur['visitors']}</div><div class=d>{cur['pageviews']} просмотров</div></div>")
     h.append("</div>")
 
-    h.append(f"<h2>Карта проекта: {pct}% пройдено</h2><div class=card><div class=bar><i style='width:{pct}%'></i></div>")
+    ctx = CTX.format(name=cfg["name"], url=cfg["url"])
+    data = dict(name=cfg["name"], url=cfg["url"], host=cfg["url"].split("//")[-1].strip("/"),
+                clientId=cfg.get("google_client_id", ""), googleSteps=GOOGLE_STEPS,
+                stages=[dict(id=k, title=t, actions=STAGE_DATA[k]["actions"],
+                             prompt=STAGE_DATA[k]["prompt"].format(ctx=ctx, name=cfg["name"], url=cfg["url"]))
+                        for k, t, _ in STAGES])
+    h.append("<h2>Данные Google Search Console</h2><div class=card id=gsc><div class=sub>Запросы, показы, клики и позиции из вашего "
+             "аккаунта Google. Данные загружаются в браузере и нигде не сохраняются.</div>"
+             "<div class=row><button class=btn id=gsc-btn>Подключить Search Console</button></div><div id=gsc-out></div></div>")
+    h.append(f"<h2>Карта проекта: <span id=pct>{pct}</span>% пройдено</h2><div class=card><div class=bar><i id=pbar style='width:{pct}%'></i></div>")
     for k, title, hint in STAGES:
-        lab, cls = STATUS[st[k]["status"]]
-        note = st[k].get("note") or hint
-        h.append(f"<div class=stage><span class=n>{k}</span><div><b>{E(title)}</b><div class=sub>{E(note)}</div></div><span class='chip {cls}'>{lab}</span></div>")
-    h.append("</div><div class=sub style='margin-top:6px'>Статусы этапов меняются в файле проекта; технические метрики обновляются сами каждый понедельник.</div>")
+        auto = f" · {st[k]['note']}" if st[k].get("note") else ""
+        h.append(f"<details class=st id=st{k}><summary><span class=n>{k}</span><div><b>{E(title)}</b><div class=sub>{E(hint)}{E(auto)}</div></div>"
+                 f"<span class='chip mute' id=chip{k}>Не начато</span></summary><div id=body{k}></div></details>")
+    h.append("</div><div class=ghost-note>Отметки сохраняются в этом браузере. Технические метрики выше обновляются автоматически.</div>")
+    h.append("<script>const D=" + json.dumps(data, ensure_ascii=False).replace("</", "<\\/") + ";" + JS + "</script>")
 
     by = {}
     for i in audit["issues"]:
