@@ -26,32 +26,6 @@ document.addEventListener('click',e=>{const t=e.target;if(t.dataset&&t.dataset.p
   copy('Проект: '+D.name+', сайт '+D.url+'.\nЭтап '+s.id+' «'+s.title+'» закрыт. Выполнено:\n'+s.actions.map(a=>'- '+a).join('\n')+'\n\nПроверь, всё ли сделано по сути (задай мне уточняющие вопросы, если данных не хватает), и зафиксируй результат этапа. '+(n?'Затем веди меня на этап '+n.id+' «'+n.title+'»:\n'+n.actions.map(a=>'- '+a).join('\n'):'Это последний этап: составь план на следующий месяц.'),t,'Этап закрыт — передать Claude')}});
 refresh();
 
-// --- Google Search Console ---
-const btn=$('#gsc-btn'),out=$('#gsc-out');
-function setup(){out.innerHTML='<div class=sub style="margin-top:8px"><b>Один раз нужно создать доступ Google</b> (бесплатно, 5 минут):</div><ol class=steps>'+D.googleSteps.map(x=>'<li>'+esc(x)+'</li>').join('')+'</ol>'}
-function gsc(token){const H={Authorization:'Bearer '+token,'Content-Type':'application/json'};
- return fetch('https://www.googleapis.com/webmasters/v3/sites',{headers:H}).then(r=>r.json()).then(async j=>{
-  const sites=(j.siteEntry||[]).map(x=>x.siteUrl);const h=D.host.replace(/^www\./,'');
-  const site=sites.find(s=>s==='sc-domain:'+h)||sites.find(s=>s.includes('//'+h)||s.includes('//www.'+h));
-  if(!site){out.innerHTML='<p class=bad>Сайт '+esc(h)+' не найден в этом аккаунте Google. Доступны: '+esc(sites.join(', ')||'ничего')+'. Войдите другим аккаунтом.</p>';btn.textContent='Войти другим аккаунтом';btn.disabled=false;return}
-  const end=new Date(Date.now()-3*864e5),start=new Date(end-27*864e5),f=d=>d.toISOString().slice(0,10);
-  const q=dim=>fetch('https://www.googleapis.com/webmasters/v3/sites/'+encodeURIComponent(site)+'/searchAnalytics/query',{method:'POST',headers:H,body:JSON.stringify({startDate:f(start),endDate:f(end),dimensions:dim,rowLimit:dim[0]=='query'?100:15})}).then(r=>r.json());
-  const [tot,qs,pg]=await Promise.all([q([]),q(['query']),q(['page'])]);const T=(tot.rows||[{}])[0];
-  const rows=(qs.rows||[]);const grow=rows.filter(r=>r.position>=8&&r.position<=20&&r.impressions>=10).sort((a,b)=>b.impressions-a.impressions).slice(0,10);
-  const lowctr=rows.filter(r=>r.position<8&&r.impressions>=30&&r.ctr<0.03).slice(0,8);
-  const tb=(h,rs)=>'<div class=tw style="margin-top:10px"><table><tr>'+h.map(x=>'<th>'+x+'</th>').join('')+'</tr>'+rs.map(r=>'<tr>'+r.map(c=>'<td>'+c+'</td>').join('')+'</tr>').join('')+'</table></div>';
-  const m=r=>[esc(r.keys[0]),r.clicks,r.impressions,(r.ctr*100).toFixed(1)+'%',r.position.toFixed(1)];
-  out.innerHTML='<div class=grid style="margin-top:10px"><div class=card><div class=k>Клики, 28 дн.</div><div class=v>'+(T.clicks||0)+'</div></div><div class=card><div class=k>Показы</div><div class=v>'+(T.impressions||0)+'</div></div><div class=card><div class=k>CTR</div><div class=v>'+((T.ctr||0)*100).toFixed(1)+'%</div></div><div class=card><div class=k>Средняя позиция</div><div class=v>'+(T.position||0).toFixed(1)+'</div></div></div>'+
-   '<h3 style="margin:16px 0 0">Быстрые точки роста: позиции 8–20</h3>'+tb(['Запрос','Клики','Показы','CTR','Позиция'],grow.map(m))+
-   '<h3 style="margin:16px 0 0">Показы есть, кликов мало (CTR &lt; 3%)</h3>'+tb(['Запрос','Клики','Показы','CTR','Позиция'],lowctr.map(m))+
-   '<h3 style="margin:16px 0 0">Топ страниц</h3>'+tb(['Страница','Клики','Показы','CTR','Позиция'],(pg.rows||[]).map(r=>[esc(r.keys[0]),r.clicks,r.impressions,(r.ctr*100).toFixed(1)+'%',r.position.toFixed(1)]))+
-   '<div class=row><button class=btn id=gsc-copy>Скопировать данные для Claude (этап 1)</button></div>';
-  $('#gsc-copy').onclick=ev=>copy('Проект: '+D.name+', '+D.url+'. Данные Search Console за 28 дней (сайт '+site+').\nЗапросы (запрос | клики | показы | CTR | позиция):\n'+rows.slice(0,100).map(r=>[r.keys[0],r.clicks,r.impressions,(r.ctr*100).toFixed(1)+'%',r.position.toFixed(1)].join(' | ')).join('\n')+'\n\nНайди точки роста и дай рекомендации по этапу 1 карты проекта.',ev.target,'Скопировать данные для Claude (этап 1)');
-  btn.textContent='Обновить данные';btn.disabled=false;}).catch(e=>{out.innerHTML='<p class=bad>Не удалось получить данные: '+esc(String(e))+'</p>';btn.disabled=false})}
-btn.onclick=()=>{if(!D.clientId){setup();return}
- if(!window.google||!google.accounts){const s=document.createElement('script');s.src='https://accounts.google.com/gsi/client';s.onload=()=>btn.click();document.head.appendChild(s);btn.textContent='Загрузка…';return}
- btn.disabled=true;btn.textContent='Вход через Google…';
- google.accounts.oauth2.initTokenClient({client_id:D.clientId,scope:'https://www.googleapis.com/auth/webmasters.readonly',callback:r=>{if(r.access_token){btn.textContent='Загружаю данные…';gsc(r.access_token)}else{btn.disabled=false;btn.textContent='Подключить Search Console'}},error_callback:()=>{btn.disabled=false;btn.textContent='Подключить Search Console'}}).requestAccessToken();};
 """
 
 STAGES = [
@@ -282,9 +256,6 @@ def build(cfg, history, audit, speed=None, metrics=None):
                              prompt=STAGE_DATA[k]["prompt"].format(ctx=ctx, name=cfg["name"], url=cfg["url"]))
                         for k, t, _ in STAGES])
     h.append(metrics_section(metrics))
-    h.append("<h2>Данные Google Search Console</h2><div class=card id=gsc><div class=sub>Запросы, показы, клики и позиции из вашего "
-             "аккаунта Google. Данные загружаются в браузере и нигде не сохраняются.</div>"
-             "<div class=row><button class=btn id=gsc-btn>Подключить Search Console</button></div><div id=gsc-out></div></div>")
     h.append(f"<h2>Карта проекта: <span id=pct>{pct}</span>% пройдено</h2><div class=card><div class=bar><i id=pbar style='width:{pct}%'></i></div>")
     for k, title, hint in STAGES:
         auto = f" · {st[k]['note']}" if st[k].get("note") else ""
