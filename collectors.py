@@ -78,8 +78,8 @@ def yandex_webmaster(host, token_env="YANDEX_TOKEN"):
         resp = _get(f"{base}/{uid}/hosts/{hq}/search-queries/popular?{qp}", h)
         qs = resp.get("queries", [])
         q_from, q_to = resp.get("date_from"), resp.get("date_to")
-        top = [[x["query_text"], round(x["indicators"].get("TOTAL_CLICKS", 0)), round(x["indicators"].get("TOTAL_SHOWS", 0)),
-                round(x["indicators"].get("AVG_SHOW_POSITION", 0), 1)] for x in qs]
+        top = [[x["query_text"], round(x["indicators"].get("TOTAL_CLICKS") or 0), round(x["indicators"].get("TOTAL_SHOWS") or 0),
+                round(x["indicators"].get("AVG_SHOW_POSITION") or 0, 1)] for x in qs]  # у части запросов позиции нет (None)
         return dict(source="yandex_webmaster", status="ok", site=hid, sqi=summ.get("sqi"),
                     pages_in_search=summ.get("searchable_pages_count"), excluded=summ.get("excluded_pages_count"),
                     problems=summ.get("site_problems", {}), clicks=sum(t[1] for t in top), impressions=sum(t[2] for t in top),
@@ -228,7 +228,8 @@ def google_ga4(host):
 def collect(host, data_dir, slug, cfg=None):
     cfg = cfg or {}
     tenv = cfg.get("yandex_token_secret") or "YANDEX_TOKEN"  # у проекта может быть свой токен Яндекса (другой аккаунт)
-    res = [bing(host), yandex_webmaster(host, tenv), yandex_metrika(host, cfg.get("metrika_counter"), tenv), google_gsc(host), google_ga4(host)]
+    wenv = cfg.get("webmaster_token_secret") or tenv  # токен Вебмастера может быть отдельным от токена Метрики
+    res = [bing(host), yandex_webmaster(host, wenv), yandex_metrika(host, cfg.get("metrika_counter"), tenv), google_gsc(host), google_ga4(host)]
     d = os.path.join(data_dir, "metrics", slug)
     os.makedirs(d, exist_ok=True)
     period = _period()
