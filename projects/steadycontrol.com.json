@@ -1,0 +1,12 @@
+{
+  "name": "SteadyControl",
+  "url": "https://steadycontrol.com",
+  "cms": "Tilda",
+  "metrika_counter": 91694618,
+  "password_secret": "DASH_PASSWORD_STEADYCONTROL",
+  "yandex_token_secret": "YANDEX_TOKEN_ZAPASNOY",
+  "enabled": true,
+  "stages": {
+    "8": {"status": "progress"}
+  }
+}
