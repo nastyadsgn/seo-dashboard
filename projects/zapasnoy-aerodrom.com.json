@@ -3,6 +3,7 @@
   "url": "https://zapasnoy-aerodrom.com",
   "cms": "",
   "password_secret": "DASH_PASSWORD_ZAPASNOY",
+  "yandex_token_secret": "YANDEX_TOKEN_ZAPASNOY",
   "enabled": true,
   "stages": {}
 }
