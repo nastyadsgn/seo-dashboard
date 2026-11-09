@@ -8,6 +8,7 @@ permissions:
 jobs:
   run:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -16,18 +17,20 @@ jobs:
         with: { node-version: "22" }
       - name: Install Google client
         run: pip install google-auth requests
-      - name: Audit, metrics, dashboard
+      - name: Audit, metrics, dashboards for all projects
         env:
           BING_API_KEY: ${{ secrets.BING_API_KEY }}
           YANDEX_TOKEN: ${{ secrets.YANDEX_TOKEN }}
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
-        run: python seolocal.py weekly https://arkadiyikura.ru --speed 2
-      - name: Encrypt dashboard
+        run: python seolocal.py weekly-all --speed 1
+      - name: Encrypt and publish dashboards
         env:
           DASH_PASSWORD: ${{ secrets.DASH_PASSWORD }}
-        run: |
-          mkdir -p site
-          npx --yes staticrypt@3 docs/arkadiyikura.ru/index.html -p "$DASH_PASSWORD" --short -d site --template-title "SEO-дашборд" --template-instructions "Введите пароль для доступа к дашборду" --template-placeholder "Пароль" --template-button "Войти" --template-error "Неверный пароль" --template-remember "Запомнить на этом устройстве" --template-color-primary "#1f5fd6" --template-color-secondary "#e8f0ff"
+          DASH_PASSWORD_FATBUS: ${{ secrets.DASH_PASSWORD_FATBUS }}
+          DASH_PASSWORD_STEADYCONTROL: ${{ secrets.DASH_PASSWORD_STEADYCONTROL }}
+          DASH_PASSWORD_ZAPASNOY: ${{ secrets.DASH_PASSWORD_ZAPASNOY }}
+          DASH_PASSWORD_PSHONKINA: ${{ secrets.DASH_PASSWORD_PSHONKINA }}
+        run: python publish.py
       - name: Save history
         run: |
           git config user.name "seolocal-bot"
