@@ -178,7 +178,7 @@ def metrics_section(metrics):
     cards = []
     ym, ga, gsc, bing, yw = (src.get(k, {}) for k in ("yandex_metrika", "google_ga4", "google_gsc", "bing", "yandex_webmaster"))
     if ym.get("status") == "ok":
-        cards.append(("Визиты из поиска (Метрика)", ym["visits"], f"{ym['users']} посетителей · отказы {ym['bounce']}%"))
+        cards.append(("Визиты из поиска (Метрика)", ym["visits"], f"{ym['users']} посетителей · отказы {ym['bounce']}%" + (f" · глубина {ym['depth']} стр." if ym.get("depth") else "")))
     if ga.get("status") == "ok":
         cards.append(("Сеансы из поиска (GA4)", ga["sessions"], f"{ga['users']} пользователей · {ga['pageviews']} просмотров"))
     if gsc.get("status") == "ok":
@@ -221,6 +221,44 @@ def metrics_section(metrics):
         if s.get("status") == "ok" and s.get("top_queries"):
             rows = "".join(f"<tr><td>{E(str(q[0]))}</td><td>{q[1]}</td><td>{q[2]}</td><td>{q[3]}</td></tr>" for q in s["top_queries"])
             h.append(f"<details><summary>Запросы в {label}</summary><div class=tw><table><tr><th>Запрос</th><th>Клики</th><th>Показы</th><th>Позиция</th></tr>{rows}</table></div></details>")
+    h.append(other_traffic(ym, d1, d2))
+    return "".join(h)
+
+
+def other_traffic(ym, d1, d2):
+    """Не только поиск: все источники, прямые заходы, соцсети, сайты-источники, UTM-метки."""
+    if ym.get("status") != "ok" or not ym.get("all_sources"):
+        return ""
+    h = [f"<h2>Все источники трафика</h2><div class=sub>Яндекс Метрика, визиты с {ru_date(d1)} по {ru_date(d2)}. "
+         f"Модель «последний значимый источник» — как в отчётах Метрики.</div>"]
+    rows = "".join(f"<tr><td>{E(r[0])}</td><td>{r[1]}</td><td>{r[2]}</td><td>{r[3]}%</td></tr>" for r in ym["all_sources"])
+    total = sum(r[1] for r in ym["all_sources"]) or 1
+    bars = hbars([[r[0], r[1]] for r in ym["all_sources"]])
+    h.append("<div class=grid2 style='margin-top:10px'><div class=card><h3 class=sec style='margin:0 0 8px'>Откуда приходят</h3>" + bars + "</div>"
+             "<div class=card><div class=tw style='border:0;padding:0'><table><tr><th>Источник</th><th>Визитов</th><th>Глубина, стр.</th><th>Отказы</th></tr>"
+             + rows + f"</table></div><div class=sub style='margin-top:6px'>Всего визитов: {total}</div></div></div>")
+    d = ym.get("direct") or {}
+    if any(d.get(k) for k in ("pages", "cities", "devices")):
+        h.append("<h3 class=sec>Прямые заходы: куда, откуда и с чего</h3>"
+                 "<div class=sub>Метрика не видит, из какого именно места пришёл прямой заход (человек ввёл адрес, открыл закладку или приложение). "
+                 "Поэтому показываем, на какие страницы заходят, из каких городов и с каких устройств.</div><div class=grid2 style='margin-top:10px'>")
+        for title, key in (("На какие страницы", "pages"), ("Из каких городов", "cities"), ("С каких устройств", "devices")):
+            if d.get(key):
+                h.append(f"<div class=card><h3 class=sec style='margin:0 0 8px'>{title}</h3>" + hbars(d[key]) + "</div>")
+        h.append("</div>")
+    two = []
+    if ym.get("social"):
+        two.append("<div class=card><h3 class=sec style='margin:0 0 8px'>Социальные сети</h3>" + hbars(ym["social"], "#9c36b5") + "</div>")
+    if ym.get("referrals"):
+        two.append("<div class=card><h3 class=sec style='margin:0 0 8px'>Сайты, с которых перешли по ссылке</h3>" + hbars(ym["referrals"], "#0c8599") + "</div>")
+    if two:
+        h.append("<h3 class=sec>Соцсети и сайты-источники</h3><div class=grid2>" + "".join(two) + "</div>")
+    if ym.get("utm"):
+        rows = "".join(f"<tr><td>{E(r[0])}</td><td>{E(r[1])}</td><td>{E(r[2])}</td><td>{r[3]}</td></tr>" for r in ym["utm"])
+        h.append("<h3 class=sec>UTM-метки</h3><div class=tw><table><tr><th>Источник (utm_source)</th><th>Канал (utm_medium)</th>"
+                 f"<th>Кампания (utm_campaign)</th><th>Визитов</th></tr>{rows}</table></div>")
+    else:
+        h.append("<h3 class=sec>UTM-метки</h3><div class=sub>За этот период визитов с UTM-метками нет.</div>")
     return "".join(h)
 
 

@@ -88,6 +88,15 @@ def yandex_webmaster(host):
         return dict(source="yandex_webmaster", status="error", error=str(e)[:200])
 
 
+def _all_sources(stat, dim):
+    """Все источники: [название, визиты, глубина просмотра (стр. за визит), отказы %]."""
+    try:
+        rows = stat(metrics="ym:s:visits,ym:s:pageDepth,ym:s:bounceRate", dimensions=dim, filters=None, sort="-ym:s:visits", limit=15).get("data", [])
+        return [[r["dimensions"][0]["name"], round(r["metrics"][0]), round(r["metrics"][1], 2), round(r["metrics"][2], 1)] for r in rows]
+    except Exception:
+        return []
+
+
 def yandex_metrika(host, counter_id=None):
     """Только переходы из поисковых систем + достижения целей. counter_id (из проекта) переопределяет поиск по домену."""
     tok = os.environ.get("YANDEX_TOKEN")
@@ -103,25 +112,47 @@ def yandex_metrika(host, counter_id=None):
         if not c:
             return dict(source="yandex_metrika", status="error", error=f"счётчик для {host} не найден или нет доступа")
         d1, d2 = _period()
-        org = "ym:s:lastTrafficSource=='organic'"
+        # «последний значимый источник» — модель атрибуции по умолчанию в отчётах Метрики (прямые заходы не перебивают поиск)
+        org = "ym:s:lastsignTrafficSource=='organic'"
 
         def stat(**kw):
-            p = dict(ids=c["id"], date1=d1, date2=d2, filters=org, limit=100)
+            p = dict(ids=c["id"], date1=d1, date2=d2, filters=org, limit=100, lang="ru")
             p.update(kw)
+            if p.get("filters") is None:
+                p.pop("filters", None)
             return _get("https://api-metrika.yandex.net/stat/v1/data?" + urllib.parse.urlencode(p), h)
-        tot = stat(metrics="ym:s:visits,ym:s:users,ym:s:pageviews,ym:s:bounceRate").get("totals", [0, 0, 0, 0])
+
+        def brk(dims, flt=None, n=10, metric="ym:s:visits"):
+            """Разбивка визитов по измерению(ям) без фильтра по поиску: [[название..., визиты], ...]."""
+            try:
+                rows = stat(metrics=metric, dimensions=dims, filters=flt, sort="-" + metric, limit=n).get("data", [])
+                return [[x["name"] or "(не определено)" for x in r["dimensions"]] + [round(r["metrics"][0])] for r in rows]
+            except Exception:
+                return []
+        tot = stat(metrics="ym:s:visits,ym:s:users,ym:s:pageviews,ym:s:bounceRate,ym:s:pageDepth").get("totals", [0, 0, 0, 0, 0])
         daily = [[r["dimensions"][0]["name"], round(r["metrics"][0])] for r in
                  stat(metrics="ym:s:visits", dimensions="ym:s:date", sort="ym:s:date").get("data", [])]
         engines = [[r["dimensions"][0]["name"], round(r["metrics"][0])] for r in
-                   stat(metrics="ym:s:visits", dimensions="ym:s:lastSearchEngineRoot", sort="-ym:s:visits", limit=10).get("data", [])]
+                   stat(metrics="ym:s:visits", dimensions="ym:s:lastsignSearchEngineRoot", sort="-ym:s:visits", limit=10).get("data", [])]
         goals = []
         gl = _get(f"https://api-metrika.yandex.net/management/v1/counter/{c['id']}/goals", h).get("goals", [])[:15]
         if gl:
             names = {f"ym:s:goal{g['id']}reaches": g["name"] for g in gl}
             gt = stat(metrics=",".join(names)).get("totals", [])
             goals = sorted(([n, round(v)] for n, v in zip(names.values(), gt)), key=lambda x: -x[1])
+        lastsign = "ym:s:lastsignTrafficSource"
+        other = dict(
+            all_sources=_all_sources(stat, lastsign),
+            direct=dict(pages=[[r[0], r[1]] for r in brk("ym:s:startURL", f"{lastsign}=='direct'", 10)],
+                        cities=[[r[0], r[1]] for r in brk("ym:s:regionCity", f"{lastsign}=='direct'", 10)],
+                        devices=[[r[0], r[1]] for r in brk("ym:s:deviceCategory", f"{lastsign}=='direct'", 5)]),
+            social=[[r[0], r[1]] for r in brk("ym:s:lastsignSocialNetwork", f"{lastsign}=='social'", 10)],
+            referrals=[[r[0], r[1]] for r in brk("ym:s:lastsignReferalSource", f"{lastsign}=='referral'", 10)],
+            utm=brk("ym:s:UTMSource,ym:s:UTMMedium,ym:s:UTMCampaign", "ym:s:UTMSource!n", 15),
+        )
         return dict(source="yandex_metrika", status="ok", counter=c["id"], visits=round(tot[0]), users=round(tot[1]),
-                    pageviews=round(tot[2]), bounce=round(tot[3], 1), daily=daily, engines=engines, goals=goals)
+                    pageviews=round(tot[2]), bounce=round(tot[3], 1), depth=round(tot[4], 2), daily=daily, engines=engines,
+                    goals=goals, **other)
     except Exception as e:
         return dict(source="yandex_metrika", status="error", error=str(e)[:200])
 
