@@ -1,0 +1,8 @@
+{
+  "name": "Запасной аэродром",
+  "url": "https://zapasnoy-aerodrom.com",
+  "cms": "",
+  "password_secret": "DASH_PASSWORD_ZAPASNOY",
+  "enabled": true,
+  "stages": {}
+}
