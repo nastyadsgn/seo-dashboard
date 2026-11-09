@@ -5,6 +5,7 @@
   "metrika_counter": 91694618,
   "password_secret": "DASH_PASSWORD_STEADYCONTROL",
   "yandex_token_secret": "YANDEX_TOKEN_ZAPASNOY",
+  "webmaster_token_secret": "YANDEX_WEBMASTER_TOKEN",
   "enabled": true,
   "stages": {
     "8": {"status": "progress"}
