@@ -1,0 +1,9 @@
+{
+  "name": "FatBus",
+  "url": "https://fatbus.ru",
+  "cms": "",
+  "metrika_counter": 106237192,
+  "password_secret": "DASH_PASSWORD_FATBUS",
+  "enabled": true,
+  "stages": {}
+}
