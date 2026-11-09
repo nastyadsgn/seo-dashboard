@@ -58,8 +58,8 @@ def bing(host):
         return dict(source="bing", status="error", error=str(e)[:200])
 
 
-def yandex_webmaster(host):
-    tok = os.environ.get("YANDEX_TOKEN")
+def yandex_webmaster(host, token_env="YANDEX_TOKEN"):
+    tok = os.environ.get(token_env)
     if not tok:
         return dict(source="yandex_webmaster", status="not_connected")
     h = {"Authorization": "OAuth " + tok}
@@ -97,9 +97,9 @@ def _all_sources(stat, dim):
         return []
 
 
-def yandex_metrika(host, counter_id=None):
+def yandex_metrika(host, counter_id=None, token_env="YANDEX_TOKEN"):
     """Только переходы из поисковых систем + достижения целей. counter_id (из проекта) переопределяет поиск по домену."""
-    tok = os.environ.get("YANDEX_TOKEN")
+    tok = os.environ.get(token_env)
     if not tok:
         return dict(source="yandex_metrika", status="not_connected")
     h = {"Authorization": "OAuth " + tok}
@@ -227,7 +227,8 @@ def google_ga4(host):
 
 def collect(host, data_dir, slug, cfg=None):
     cfg = cfg or {}
-    res = [bing(host), yandex_webmaster(host), yandex_metrika(host, cfg.get("metrika_counter")), google_gsc(host), google_ga4(host)]
+    tenv = cfg.get("yandex_token_secret") or "YANDEX_TOKEN"  # у проекта может быть свой токен Яндекса (другой аккаунт)
+    res = [bing(host), yandex_webmaster(host, tenv), yandex_metrika(host, cfg.get("metrika_counter"), tenv), google_gsc(host), google_ga4(host)]
     d = os.path.join(data_dir, "metrics", slug)
     os.makedirs(d, exist_ok=True)
     period = _period()
