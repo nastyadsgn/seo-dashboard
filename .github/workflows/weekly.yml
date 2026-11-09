@@ -21,6 +21,9 @@ jobs:
         env:
           BING_API_KEY: ${{ secrets.BING_API_KEY }}
           YANDEX_TOKEN: ${{ secrets.YANDEX_TOKEN }}
+          YANDEX_TOKEN_ZAPASNOY: ${{ secrets.YANDEX_TOKEN_ZAPASNOY }}
+          YANDEX_TOKEN_STEADYCONTROL: ${{ secrets.YANDEX_TOKEN_STEADYCONTROL }}
+          YANDEX_TOKEN_PSHONKINA: ${{ secrets.YANDEX_TOKEN_PSHONKINA }}
           GOOGLE_SA_JSON: ${{ secrets.GOOGLE_SA_JSON }}
         run: python seolocal.py weekly-all --speed 1
       - name: Encrypt and publish dashboards
