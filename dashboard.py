@@ -186,7 +186,9 @@ def metrics_section(metrics):
     if bing.get("status") == "ok":
         cards.append(("Клики Bing", bing["clicks"], f"{bing['impressions']} показов"))
     if yw.get("status") == "ok":
-        cards.append(("Клики Яндекса (Вебмастер)", yw["clicks"], f"{yw['impressions']} показов" + (f" · ИКС {yw['sqi']}" if yw.get("sqi") is not None else "")))
+        qp = yw.get("queries_period") or [None, None]
+        per = f" · за {ru_date(qp[0])} — {ru_date(qp[1])} (Яндекс отдаёт с задержкой)" if qp[0] and qp[1] else ""
+        cards.append(("Клики Яндекса (Вебмастер)", yw["clicks"], f"{yw['impressions']} показов" + (f" · ИКС {yw['sqi']}" if yw.get("sqi") is not None else "") + per))
     h.append("<div class=grid style='margin-top:10px'>" + "".join(f"<div class=card><div class=k>{E(a)}</div><div class=v>{b}</div><div class=d>{E(c)}</div></div>" for a, b, c in cards) + "</div>")
     notes = []
     for k, label in (("yandex_metrika", "Яндекс Метрика"), ("yandex_webmaster", "Яндекс Вебмастер"), ("bing", "Bing Webmaster"),

@@ -72,31 +72,36 @@ def yandex_webmaster(host):
             return dict(source="yandex_webmaster", status="error", error=f"сайт {host} не найден в Вебмастере")
         hq = urllib.parse.quote(hid, safe="")
         summ = _get(f"{base}/{uid}/hosts/{hq}/summary", h)
-        d1, d2 = _period()
+        # Вебмастер отдаёт запросы с большой задержкой: без дат берём последний доступный период и показываем его даты
         qp = urllib.parse.urlencode([("order_by", "TOTAL_SHOWS"), ("query_indicator", "TOTAL_SHOWS"), ("query_indicator", "TOTAL_CLICKS"),
-                                     ("query_indicator", "AVG_SHOW_POSITION"), ("date_from", d1), ("date_to", d2), ("limit", 50)])
-        qs = _get(f"{base}/{uid}/hosts/{hq}/search-queries/popular?{qp}", h).get("queries", [])
+                                     ("query_indicator", "AVG_SHOW_POSITION"), ("limit", 50)])
+        resp = _get(f"{base}/{uid}/hosts/{hq}/search-queries/popular?{qp}", h)
+        qs = resp.get("queries", [])
+        q_from, q_to = resp.get("date_from"), resp.get("date_to")
         top = [[x["query_text"], round(x["indicators"].get("TOTAL_CLICKS", 0)), round(x["indicators"].get("TOTAL_SHOWS", 0)),
                 round(x["indicators"].get("AVG_SHOW_POSITION", 0), 1)] for x in qs]
         return dict(source="yandex_webmaster", status="ok", site=hid, sqi=summ.get("sqi"),
                     pages_in_search=summ.get("searchable_pages_count"), excluded=summ.get("excluded_pages_count"),
                     problems=summ.get("site_problems", {}), clicks=sum(t[1] for t in top), impressions=sum(t[2] for t in top),
-                    top_queries=top[:20])
+                    top_queries=top[:20], queries_period=[q_from, q_to])
     except Exception as e:
         return dict(source="yandex_webmaster", status="error", error=str(e)[:200])
 
 
-def yandex_metrika(host):
-    """Только переходы из поисковых систем + достижения целей."""
+def yandex_metrika(host, counter_id=None):
+    """Только переходы из поисковых систем + достижения целей. counter_id (из проекта) переопределяет поиск по домену."""
     tok = os.environ.get("YANDEX_TOKEN")
     if not tok:
         return dict(source="yandex_metrika", status="not_connected")
     h = {"Authorization": "OAuth " + tok}
     try:
         cs = _get("https://api-metrika.yandex.net/management/v1/counters", h).get("counters", [])
-        c = next((x for x in cs if host in (x.get("site") or "") or host in (x.get("site2") or {}).get("site", "")), None)
+        if counter_id:
+            c = next((x for x in cs if x["id"] == int(counter_id)), None)
+        else:
+            c = next((x for x in cs if host in (x.get("site") or "") or host in (x.get("site2") or {}).get("site", "")), None)
         if not c:
-            return dict(source="yandex_metrika", status="error", error=f"счётчик для {host} не найден")
+            return dict(source="yandex_metrika", status="error", error=f"счётчик для {host} не найден или нет доступа")
         d1, d2 = _period()
         org = "ym:s:lastTrafficSource=='organic'"
 
@@ -189,8 +194,9 @@ def google_ga4(host):
         return dict(source="google_ga4", status="error", error=str(e)[:200])
 
 
-def collect(host, data_dir, slug):
-    res = [bing(host), yandex_webmaster(host), yandex_metrika(host), google_gsc(host), google_ga4(host)]
+def collect(host, data_dir, slug, cfg=None):
+    cfg = cfg or {}
+    res = [bing(host), yandex_webmaster(host), yandex_metrika(host, cfg.get("metrika_counter")), google_gsc(host), google_ga4(host)]
     d = os.path.join(data_dir, "metrics", slug)
     os.makedirs(d, exist_ok=True)
     period = _period()

@@ -63,7 +63,7 @@ def build_dashboard(url, date=None, collect=False):
     out = os.path.join(out_dir, "index.html")
     import collectors as CO
     if collect:
-        CO.collect(host.replace("www.", ""), DATA, slug(url))
+        CO.collect(host.replace("www.", ""), DATA, slug(url), cfg)
     open(out, "w", encoding="utf-8").write(D.build(cfg, H.load(slug(url), DATA), d, d.get("speed"), CO.latest(DATA, slug(url))))
     return out
 
@@ -75,6 +75,8 @@ def main():
     w = sub.add_parser("weekly", help="аудит + снимок + дашборд (для планировщика)")
     w.add_argument("url")
     w.add_argument("--speed", type=int, default=2)
+    wa = sub.add_parser("weekly-all", help="недельный запуск для всех включённых проектов из projects/")
+    wa.add_argument("--speed", type=int, default=1)
     a = sub.add_parser("audit")
     a.add_argument("url")
     a.add_argument("--pages", type=int, default=200)
@@ -90,6 +92,19 @@ def main():
 
     if args.cmd == "dashboard":
         print("Дашборд:", build_dashboard(C.norm(args.url)))
+    elif args.cmd == "weekly-all":
+        import glob
+        import subprocess
+        root = os.path.dirname(os.path.abspath(__file__))
+        for f in sorted(glob.glob(os.path.join(root, "projects", "*.json"))):
+            cfg = json.load(open(f, encoding="utf-8"))
+            if not cfg.get("enabled", True):
+                print("Пропуск (выключен):", cfg.get("url"))
+                continue
+            print("=== Проект:", cfg["name"], cfg["url"])
+            code = subprocess.run([sys.executable, os.path.abspath(__file__), "weekly", cfg["url"], "--speed", str(args.speed)]).returncode
+            if code:
+                print("Проект завершился с ошибкой, иду дальше:", cfg["url"])
     elif args.cmd in ("audit", "weekly"):
         url = C.norm(args.url if args.url.startswith("http") else "https://" + args.url)
         if args.cmd == "weekly":
