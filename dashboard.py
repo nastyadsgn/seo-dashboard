@@ -237,12 +237,12 @@ def other_traffic(ym, d1, d2):
     h.append("<div class=grid2 style='margin-top:10px'><div class=card><h3 class=sec style='margin:0 0 8px'>Откуда приходят</h3>" + bars + "</div>"
              "<div class=card><div class=tw style='border:0;padding:0'><table><tr><th>Источник</th><th>Визитов</th><th>Глубина, стр.</th><th>Отказы</th></tr>"
              + rows + f"</table></div><div class=sub style='margin-top:6px'>Всего визитов: {total}</div></div></div>")
-    d = ym.get("direct") or {}
+    d = ym.get("search") or {}
     if any(d.get(k) for k in ("pages", "cities", "devices")):
-        h.append("<h3 class=sec>Прямые заходы: куда, откуда и с чего</h3>"
-                 "<div class=sub>Метрика не видит, из какого именно места пришёл прямой заход (человек ввёл адрес, открыл закладку или приложение). "
-                 "Поэтому показываем, на какие страницы заходят, из каких городов и с каких устройств.</div><div class=grid2 style='margin-top:10px'>")
-        for title, key in (("На какие страницы", "pages"), ("Из каких городов", "cities"), ("С каких устройств", "devices")):
+        h.append("<h3 class=sec>Заходы из поиска: куда, откуда и с чего</h3>"
+                 "<div class=sub>Только визиты из поисковых систем: на какие страницы приходят из поиска, из каких городов и с каких устройств.</div>"
+                 "<div class=grid2 style='margin-top:10px'>")
+        for title, key in (("На какие страницы заходят из поиска", "pages"), ("Из каких городов", "cities"), ("С каких устройств", "devices")):
             if d.get(key):
                 h.append(f"<div class=card><h3 class=sec style='margin:0 0 8px'>{title}</h3>" + hbars(d[key]) + "</div>")
         h.append("</div>")

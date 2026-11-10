@@ -143,9 +143,9 @@ def yandex_metrika(host, counter_id=None, token_env="YANDEX_TOKEN"):
         lastsign = "ym:s:lastsignTrafficSource"
         other = dict(
             all_sources=_all_sources(stat, lastsign),
-            direct=dict(pages=[[r[0], r[1]] for r in brk("ym:s:startURL", f"{lastsign}=='direct'", 10)],
-                        cities=[[r[0], r[1]] for r in brk("ym:s:regionCity", f"{lastsign}=='direct'", 10)],
-                        devices=[[r[0], r[1]] for r in brk("ym:s:deviceCategory", f"{lastsign}=='direct'", 5)]),
+            search=dict(pages=[[r[0], r[1]] for r in brk("ym:s:startURL", f"{lastsign}=='organic'", 10)],
+                        cities=[[r[0], r[1]] for r in brk("ym:s:regionCity", f"{lastsign}=='organic'", 10)],
+                        devices=[[r[0], r[1]] for r in brk("ym:s:deviceCategory", f"{lastsign}=='organic'", 5)]),
             social=[[r[0], r[1]] for r in brk("ym:s:lastsignSocialNetwork", f"{lastsign}=='social'", 10)],
             referrals=[[r[0], r[1]] for r in brk("ym:s:lastsignReferalSource", f"{lastsign}=='referral'", 10)],
             utm=brk("ym:s:UTMSource,ym:s:UTMMedium,ym:s:UTMCampaign", "ym:s:UTMSource!n", 15),
