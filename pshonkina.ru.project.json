@@ -1,0 +1,11 @@
+{
+  "name": "Пшонкина (хирург)",
+  "url": "https://pshonkina.ru",
+  "cms": "",
+  "metrika_counter": 62981851,
+  "password_secret": "DASH_PASSWORD_PSHONKINA",
+  "yandex_token_secret": "YANDEX_TOKEN_ZAPASNOY",
+  "webmaster_token_secret": "YANDEX_WEBMASTER_TOKEN",
+  "enabled": true,
+  "stages": {}
+}

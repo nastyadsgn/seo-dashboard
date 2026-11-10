@@ -22,7 +22,7 @@ def main():
     os.makedirs(out)
     published = []
     npx = shutil.which("npx") or shutil.which("npx.cmd")
-    for f in sorted(glob.glob(os.path.join(ROOT, "projects", "*.json"))):
+    for f in sorted(glob.glob(os.path.join(ROOT, "projects", "*.json")) + glob.glob(os.path.join(ROOT, "*.project.json"))):
         cfg = json.load(open(f, encoding="utf-8"))
         host = urlparse(cfg["url"]).netloc
         if not cfg.get("enabled", True):

@@ -54,6 +54,8 @@ def build_dashboard(url, date=None, collect=False):
     d = json.load(open(os.path.join(DATA, slug(url) + "_audit.json"), encoding="utf-8"))
     host = urlparse(url).netloc
     cfg_path = os.path.join(root, "projects", slug(url) + ".json")
+    if not os.path.exists(cfg_path):  # файл проекта можно положить и в корень: <домен>.project.json
+        cfg_path = os.path.join(root, slug(url) + ".project.json")
     cfg = json.load(open(cfg_path, encoding="utf-8")) if os.path.exists(cfg_path) else dict(name=host, url=url)
     tr = T.stats(DB, host)
     H.snapshot(slug(url), DATA, d["pages"], d["issues"], d["health"], d["broken"], d.get("speed"), U.stats(url, DB),
@@ -96,7 +98,7 @@ def main():
         import glob
         import subprocess
         root = os.path.dirname(os.path.abspath(__file__))
-        for f in sorted(glob.glob(os.path.join(root, "projects", "*.json"))):
+        for f in sorted(glob.glob(os.path.join(root, "projects", "*.json")) + glob.glob(os.path.join(root, "*.project.json"))):
             cfg = json.load(open(f, encoding="utf-8"))
             if not cfg.get("enabled", True):
                 print("Пропуск (выключен):", cfg.get("url"))
